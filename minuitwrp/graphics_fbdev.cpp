@@ -4,7 +4,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ 
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -288,7 +288,7 @@ static GRSurface* fbdev_flip(minui_backend* backend __unused) {
     int idx;
     unsigned char tmp;
     unsigned char* ucfb_vaddr = (unsigned char*)gr_draw->data;
-    for (idx = 0 ; idx < (unsigned int)(gr_draw->height * gr_draw->row_bytes);
+    for (idx = 0 ; idx < (gr_draw->height * gr_draw->row_bytes);
             idx += 4) {
         tmp = ucfb_vaddr[idx];
         ucfb_vaddr[idx    ] = ucfb_vaddr[idx + 2];
