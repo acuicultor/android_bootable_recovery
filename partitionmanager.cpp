@@ -71,6 +71,9 @@ extern "C" {
 	#include "gui/pages.hpp"
 	#ifdef TW_INCLUDE_FBE
 		#include "crypto/ext4crypt/Decrypt.h"
+		#ifdef TW_INCLUDE_FBE_METADATA_DECRYPT
+			#include "crypto/ext4crypt/MetadataCrypt.h"
+		#endif
 	#endif
 	#ifdef TW_CRYPTO_USE_SYSTEM_VOLD
 		#include "crypto/vold_decrypt/vold_decrypt.h"
@@ -277,6 +280,27 @@ int TWPartitionManager::Process_Fstab(string Fstab_Filename, bool Display_Error)
 #ifdef TW_INCLUDE_CRYPTO
 	TWPartition* Decrypt_Data = Find_Partition_By_Path("/data");
 	if (Decrypt_Data && Decrypt_Data->Is_Encrypted && !Decrypt_Data->Is_Decrypted) {
+		if (!Decrypt_Data->Key_Directory.empty() && Mount_By_Path(Decrypt_Data->Key_Directory, false)) {
+#ifdef TW_INCLUDE_FBE_METADATA_DECRYPT
+			if (e4crypt_mount_metadata_encrypted(Decrypt_Data->Mount_Point, false, Decrypt_Data->Key_Directory, Decrypt_Data->Actual_Block_Device, &Decrypt_Data->Decrypted_Block_Device)) {
+				LOGINFO("Successfully decrypted metadata encrypted data partition with new block device: '%s'\n", Decrypt_Data->Decrypted_Block_Device.c_str());
+				property_set("ro.crypto.state", "encrypted");
+				Decrypt_Data->Is_Decrypted = true; // Needed to make the mount function work correctly
+				int retry_count = 10;
+				while (!Decrypt_Data->Mount(false) && --retry_count)
+					usleep(500);
+				if (Decrypt_Data->Mount(false)) {
+					Decrypt_Data->Decrypt_FBE_DE();
+				} else {
+					LOGINFO("Failed to mount data after metadata decrypt\n");
+				}
+			} else {
+				LOGINFO("Unable to decrypt metadata encryption\n");
+			}
+#else
+			LOGERR("Metadata FBE decrypt support not present in this TWRP\n");
+#endif
+		}
 		if (Decrypt_Data->Is_FBE) {
 			if (DataManager::GetIntValue(TW_CRYPTO_PWTYPE) == 0) {
 				if (Decrypt_Device("!") == 0) {
@@ -467,6 +491,8 @@ void TWPartitionManager::Output_Partition(TWPartition* Part) {
 		printf("   Mount_Flags: %i, Mount_Options: %s\n", Part->Mount_Flags, Part->Mount_Options.c_str());
 	if (Part->MTP_Storage_ID)
 		printf("   MTP_Storage_ID: %i\n", Part->MTP_Storage_ID);
+	if (!Part->Key_Directory.empty())
+		printf("   Metadata Key Directory: %s\n", Part->Key_Directory.c_str());
 	printf("\n");
 }
 
@@ -1104,7 +1130,7 @@ int TWPartitionManager::Run_Restore(const string& Restore_Name) {
 		}
 	}
 	TWFunc::GUI_Operation_Text(TW_UPDATE_SYSTEM_DETAILS_TEXT, gui_parse_text("{@updating_system_details}"));
-	UnMount_By_Path("/system", false);
+	UnMount_By_Path(Get_Android_Root_Path(), false);
 	Update_System_Details();
 	UnMount_Main_Partitions();
 	time(&rStop);
@@ -1490,7 +1516,7 @@ void TWPartitionManager::Update_System_Details(void) {
 	for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
 		(*iter)->Update_Size(true);
 		if ((*iter)->Can_Be_Mounted) {
-			if ((*iter)->Mount_Point == "/system") {
+			if ((*iter)->Mount_Point == Get_Android_Root_Path()) {
 				int backup_display_size = (int)((*iter)->Backup_Size / 1048576LLU);
 				DataManager::SetValue(TW_BACKUP_SYSTEM_SIZE, backup_display_size);
 			} else if ((*iter)->Mount_Point == "/data" || (*iter)->Mount_Point == "/datadata") {
@@ -1859,7 +1885,7 @@ void TWPartitionManager::UnMount_Main_Partitions(void) {
 
 	TWPartition* Boot_Partition = Find_Partition_By_Path("/boot");
 
-	UnMount_By_Path("/system", true);
+	UnMount_By_Path(Get_Android_Root_Path(), true);
 	if (!datamedia)
 		UnMount_By_Path("/data", true);
 
@@ -2724,6 +2750,13 @@ string TWPartitionManager::Get_Active_Slot_Suffix() {
 }
 string TWPartitionManager::Get_Active_Slot_Display() {
 	return Active_Slot_Display;
+}
+
+string TWPartitionManager::Get_Android_Root_Path() {
+	std::string Android_Root = getenv("ANDROID_ROOT");
+	if (Android_Root == "")
+		Android_Root = "/system";
+	return Android_Root;
 }
 
 void TWPartitionManager::Remove_Uevent_Devices(const string& Mount_Point) {
