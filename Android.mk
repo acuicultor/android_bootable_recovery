@@ -15,7 +15,7 @@
 LOCAL_PATH := $(call my-dir)
 commands_TWRP_local_path := $(LOCAL_PATH)
 
-ifneq ($(project-path-for),)
+ifdef project-path-for
     ifeq ($(LOCAL_PATH),$(call project-path-for,recovery))
         PROJECT_PATH_AGREES := true
         BOARD_SEPOLICY_DIRS += $(call project-path-for,recovery)/sepolicy
@@ -155,6 +155,10 @@ ifneq ($(wildcard system/core/libsparse/Android.mk),)
 LOCAL_SHARED_LIBRARIES += libsparse
 endif
 
+ifndef $(TW_USE_TOOLBOX)
+    TW_USE_TOOLBOX := true
+endif
+
 ifeq ($(TW_OEM_BUILD),true)
     LOCAL_CFLAGS += -DTW_OEM_BUILD
     BOARD_HAS_NO_REAL_SDCARD := true
@@ -196,11 +200,6 @@ LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
 #else
 #  LOCAL_STATIC_LIBRARIES += $(TARGET_RECOVERY_UI_LIB)
 #endif
-ifeq ($(TARGET_RECOVERY_TWRP_LIB),)
-    LOCAL_SRC_FILES += BasePartition.cpp
-else
-    LOCAL_STATIC_LIBRARIES += $(TARGET_RECOVERY_TWRP_LIB)
-endif
 
 LOCAL_C_INCLUDES += system/extras/ext4_utils
 
@@ -307,9 +306,6 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
         TW_INCLUDE_CRYPTO_FBE := true
         LOCAL_CFLAGS += -DTW_INCLUDE_FBE
         LOCAL_SHARED_LIBRARIES += libe4crypt
-        ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 28; echo $$?),0)
-            LOCAL_CFLAGS += -DTW_INCLUDE_FBE_METADATA_DECRYPT
-        endif
     endif
     ifneq ($(TW_CRYPTO_USE_SYSTEM_VOLD),)
     ifneq ($(TW_CRYPTO_USE_SYSTEM_VOLD),false)
@@ -381,6 +377,7 @@ endif
 ifeq ($(TW_EXCLUDE_TWRPAPP),true)
     LOCAL_CFLAGS += -DTW_EXCLUDE_TWRPAPP
 endif
+
 LOCAL_REQUIRED_MODULES += \
     dump_image \
     erase_image \
@@ -493,9 +490,6 @@ ifeq ($(shell test $(CM_PLATFORM_SDK_VERSION) -ge 3; echo $$?),0)
         fsck.f2fs \
         mkfs.f2fs
 endif
-ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 28; echo $$?),0)
-    LOCAL_REQUIRED_MODULES += sload.f2fs
-endif
 endif
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 25; echo $$?),0)
@@ -503,7 +497,7 @@ ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 25; echo $$?),0)
 endif
 
 ifeq ($(BOARD_CACHEIMAGE_PARTITION_SIZE),)
-LOCAL_REQUIRED_MODULES := recovery-persist recovery-refresh
+LOCAL_REQUIRED_MODULES += recovery-persist recovery-refresh
 endif
 
 include $(BUILD_EXECUTABLE)
